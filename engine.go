@@ -21,7 +21,22 @@
 
 package mx
 
-import "io"
+import (
+	"bufio"
+	"io"
+	"os"
+)
+
+const (
+	// DefaultEscape is the default character which starts an escape sequence.
+	DefaultEscape = '\\'
+	// DefaultQuote is the default character which quotes a sequence.
+	DefaultQuote = '`'
+	// DefaultGroupStart is the default character which starts a grouping.
+	DefaultGroupStart = '{'
+	// DefaultGroupEnd is the default character which ends a grouping.
+	DefaultGroupEnd = '}'
+)
 
 // Engine is the core of the macro expansion.
 type Engine struct {
@@ -37,9 +52,71 @@ type Engine struct {
 	// IncludePaths is the list of directory paths which the engine uses to look
 	// for included files.
 	IncludePaths []string
+
+	escape     rune
+	quote      rune
+	groupStart rune
+	groupEnd   rune
+}
+
+type runeReader interface {
+	ReadRune() (r rune, size int, err error)
+}
+
+type runeWriter interface {
+	WriteRune(r rune) (size int, err error)
 }
 
 // Execute runs the expansion until there is no character left in the input.
 func (e *Engine) Execute() error {
+	if e.Reader == nil {
+		e.Reader = os.Stdin
+	}
+
+	if e.Writer == nil {
+		e.Writer = os.Stdout
+	}
+
+	e.escape = DefaultEscape
+	e.quote = DefaultQuote
+	e.groupStart = DefaultGroupStart
+	e.groupEnd = DefaultGroupEnd
+
+	var r runeReader
+	if rr, ok := e.Reader.(runeReader); ok {
+		r = rr
+	} else {
+		r = bufio.NewReader(e.Reader)
+	}
+
+	var w runeWriter
+	if rw, ok := e.Writer.(runeWriter); ok {
+		w = rw
+	} else {
+		w = bufio.NewWriter(e.Writer)
+	}
+
+	if err := e.expand(w, r); err != nil {
+		return err
+	}
+
+	if f, ok := w.(interface{ Flush() error }); ok {
+		return f.Flush()
+	}
+
+	return nil
+}
+
+func (e *Engine) expand(w runeWriter, r runeReader) error {
+	for {
+		ch, _, err := r.ReadRune()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return err
+		}
+		w.WriteRune(ch)
+	}
 	return nil
 }
