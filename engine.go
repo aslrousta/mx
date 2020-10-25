@@ -23,9 +23,10 @@ package mx
 
 import (
 	"bufio"
-	"fmt"
+	"errors"
 	"io"
 	"os"
+	"unicode"
 )
 
 const (
@@ -41,6 +42,12 @@ const (
 	MinMacroBufSize = 512
 	// MinExpBufSize is the minimum acceptable expansion buffer size.
 	MinExpBufSize = 512
+)
+
+const (
+	modeNormal = iota
+	modeWhitespace
+	modeCommand
 )
 
 // Engine is the core of the macro expansion.
@@ -72,6 +79,9 @@ type Engine struct {
 	quote      rune
 	groupStart rune
 	groupEnd   rune
+
+	mode int
+	ch   rune
 
 	// Macro buffer holds the definition and expantion of the macros. Its size
 	// is determined using MacroBufSize field, and mpos keeps the current
@@ -108,22 +118,14 @@ func (e *Engine) Execute() error {
 	if e.MacroBufSize == 0 {
 		e.MacroBufSize = MinMacroBufSize
 	} else if e.MacroBufSize < MinMacroBufSize {
-		return fmt.Errorf("small macro buffer size (%d)", e.MacroBufSize)
+		return errors.New("too small macro buffer")
 	}
 
 	if e.ExpBufSize == 0 {
 		e.ExpBufSize = MinExpBufSize
 	} else if e.ExpBufSize < MinExpBufSize {
-		return fmt.Errorf("small expansion buffer size (%d)", e.ExpBufSize)
+		return errors.New("too small expansion buffer")
 	}
-
-	e.escape = DefaultEscape
-	e.quote = DefaultQuote
-	e.groupStart = DefaultGroupStart
-	e.groupEnd = DefaultGroupEnd
-
-	e.mbuf = make([]rune, e.MacroBufSize)
-	e.ebuf = make([]rune, e.ExpBufSize)
 
 	var r runeReader
 	if rr, ok := e.Reader.(runeReader); ok {
@@ -139,6 +141,16 @@ func (e *Engine) Execute() error {
 		w = bufio.NewWriter(e.Writer)
 	}
 
+	e.escape = DefaultEscape
+	e.quote = DefaultQuote
+	e.groupStart = DefaultGroupStart
+	e.groupEnd = DefaultGroupEnd
+
+	e.mode = modeNormal
+
+	e.mbuf = make([]rune, e.MacroBufSize)
+	e.ebuf = make([]rune, e.ExpBufSize)
+
 	if err := e.expand(w, r); err != nil {
 		return err
 	}
@@ -150,18 +162,86 @@ func (e *Engine) Execute() error {
 	return nil
 }
 
-func (e *Engine) expand(w runeWriter, r runeReader) error {
+func (e *Engine) expand(w runeWriter, r runeReader) (err error) {
+	if err := e.read(r); err != nil {
+		if err == io.EOF {
+			return nil
+		}
+		return err
+	}
 	for {
-		ch, _, err := r.ReadRune()
+		switch e.mode {
+		case modeNormal:
+			err = e.doNormal(w, r)
+		case modeWhitespace:
+			err = e.doWhitespace(w, r)
+		case modeCommand:
+			err = e.doCommand(w, r)
+		}
 		if err != nil {
 			if err == io.EOF {
-				break
+				return nil
 			}
 			return err
 		}
-		if _, err := w.WriteRune(ch); err != nil {
+	}
+}
+
+func (e *Engine) doNormal(w runeWriter, r runeReader) error {
+	for {
+		if e.ch == e.escape {
+			e.mode = modeCommand
+			return nil
+		} else if unicode.IsSpace(e.ch) {
+			e.mode = modeWhitespace
+			return nil
+		} else if err := e.write(w, e.ch); err != nil {
+			return err
+		}
+		if err := e.read(r); err != nil {
 			return err
 		}
 	}
+}
+
+func (e *Engine) doWhitespace(w runeWriter, r runeReader) error {
+	newLines := 0
+	for {
+		if e.ch == '\n' {
+			newLines++
+		} else if !unicode.IsSpace(e.ch) {
+			break
+		}
+		if err := e.read(r); err != nil {
+			return err
+		}
+	}
+	if newLines > 1 {
+		if err := e.write(w, '\n'); err != nil {
+			return err
+		}
+		if err := e.write(w, '\n'); err != nil {
+			return err
+		}
+	} else {
+		if err := e.write(w, ' '); err != nil {
+			return err
+		}
+	}
+	e.mode = modeNormal
 	return nil
+}
+
+func (e *Engine) doCommand(w runeWriter, r runeReader) error {
+	return nil
+}
+
+func (e *Engine) read(r runeReader) (err error) {
+	e.ch, _, err = r.ReadRune()
+	return
+}
+
+func (e *Engine) write(w runeWriter, ch rune) (err error) {
+	_, err = w.WriteRune(ch)
+	return
 }

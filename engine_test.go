@@ -33,3 +33,16 @@ func ExampleEngine_unicode() {
 	fmt.Println(b.String())
 	// Output: こんにちは世界
 }
+
+func ExampleEngine_whitespaces() {
+	b := bytes.Buffer{}
+	e := mx.Engine{
+		Reader: strings.NewReader("Hello, \n\t World"),
+		Writer: &b,
+	}
+	if err := e.Execute(); err != nil {
+		panic(err)
+	}
+	fmt.Println(b.String())
+	// Output: Hello, World
+}
