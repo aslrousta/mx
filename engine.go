@@ -26,13 +26,17 @@ import "io"
 // Engine is the core of the macro expansion.
 type Engine struct {
 
-	// Reader is the stream from-which characters are read. If Reader is nil, it
-	// tries to read from os.Stdin.
+	// Reader is the input stream from-which characters are read. If Reader is
+	// nil, it tries to read from os.Stdin.
 	Reader io.Reader
 
-	// Writer is the stream to-which expanded result is written. If Writer is
-	// nil, it tries to write into os.Stdout.
+	// Writer is the output stream to-which expanded result is written. If
+	// Writer is nil, it tries to write into os.Stdout.
 	Writer io.Writer
+
+	// IncludePaths is the list of directory paths which the engine uses to look
+	// for included files.
+	IncludePaths []string
 }
 
 // Execute runs the expansion until there is no character left in the input.

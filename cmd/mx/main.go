@@ -67,9 +67,27 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/aslrousta/mx"
 )
+
+type stringArray []string
+
+func (sa stringArray) String() string {
+	return strings.Join(sa, ",")
+}
+
+func (sa *stringArray) Set(value string) error {
+	*sa = append(*sa, value)
+	return nil
+}
+
+var includePaths stringArray
+
+func init() {
+	flag.Var(&includePaths, "include", "adds a `directory` to the list of include paths")
+}
 
 func printUsage() {
 	fmt.Fprintf(
@@ -77,7 +95,7 @@ func printUsage() {
 		"Usage: mx [OPTION]... FILE\n"+
 			"Processes and expands macros in FILE and writes the result to stdout.\n"+
 			"If no FILE is given, it reads from stdin.\n\n"+
-			"Options:\n",
+			"Options:\n\n",
 	)
 	flag.PrintDefaults()
 }
@@ -86,7 +104,9 @@ func main() {
 	flag.Usage = printUsage
 	flag.Parse()
 
-	var e mx.Engine
+	e := mx.Engine{
+		IncludePaths: includePaths,
+	}
 
 	if len(flag.Args()) > 0 {
 		f, err := os.Open(flag.Arg(0))
