@@ -23,6 +23,7 @@ package mx
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"os"
 )
@@ -36,6 +37,10 @@ const (
 	DefaultGroupStart = '{'
 	// DefaultGroupEnd is the default character which ends a grouping.
 	DefaultGroupEnd = '}'
+	// MinMacroBufSize is the minimum acceptable macro buffer size.
+	MinMacroBufSize = 512
+	// MinExpBufSize is the minimum acceptable expansion buffer size.
+	MinExpBufSize = 512
 )
 
 // Engine is the core of the macro expansion.
@@ -53,10 +58,33 @@ type Engine struct {
 	// for included files.
 	IncludePaths []string
 
+	// MacroBufSize is the number of unicode characters that the macro buffer
+	// can hold. It should be at-least MinMacroBufSize characters long. A zero
+	// indicates to use the minimum value.
+	MacroBufSize int
+
+	// ExpBufSize is the number of unicode characters that the expansion buffer
+	// can hold. It should be at-least MinExpBufSize characters long. A zero
+	// indicates to use the minimum value.
+	ExpBufSize int
+
 	escape     rune
 	quote      rune
 	groupStart rune
 	groupEnd   rune
+
+	// Macro buffer holds the definition and expantion of the macros. Its size
+	// is determined using MacroBufSize field, and mpos keeps the current
+	// position in the macro buffer.
+	mbuf []rune
+	mpos int
+
+	// Expansion buffer hold the intermediate result of the macro expansion
+	// before being transmitted to the output stream. Its size is determined
+	// using ExpBufSize field, and epos keeps the current position in the
+	// expansion buffer.
+	ebuf []rune
+	epos int
 }
 
 type runeReader interface {
@@ -77,10 +105,25 @@ func (e *Engine) Execute() error {
 		e.Writer = os.Stdout
 	}
 
+	if e.MacroBufSize == 0 {
+		e.MacroBufSize = MinMacroBufSize
+	} else if e.MacroBufSize < MinMacroBufSize {
+		return fmt.Errorf("small macro buffer size (%d)", e.MacroBufSize)
+	}
+
+	if e.ExpBufSize == 0 {
+		e.ExpBufSize = MinExpBufSize
+	} else if e.ExpBufSize < MinExpBufSize {
+		return fmt.Errorf("small expansion buffer size (%d)", e.ExpBufSize)
+	}
+
 	e.escape = DefaultEscape
 	e.quote = DefaultQuote
 	e.groupStart = DefaultGroupStart
 	e.groupEnd = DefaultGroupEnd
+
+	e.mbuf = make([]rune, e.MacroBufSize)
+	e.ebuf = make([]rune, e.ExpBufSize)
 
 	var r runeReader
 	if rr, ok := e.Reader.(runeReader); ok {
@@ -116,7 +159,9 @@ func (e *Engine) expand(w runeWriter, r runeReader) error {
 			}
 			return err
 		}
-		w.WriteRune(ch)
+		if _, err := w.WriteRune(ch); err != nil {
+			return err
+		}
 	}
 	return nil
 }

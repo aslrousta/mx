@@ -19,48 +19,6 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-/*
- *  File: main.go
- *  ---
- *
- *  Macro eXpander
- *  Copyright (C) 2020  Ali AslRousta
- *
- *  This program is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation, either version 3 of the License, or
- *  (at your option) any later version.
- *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
-
-/*
- *  File: main.go
- *  ---
- *
- *  Macro eXpander
- *  Copyright (C) 2020  Ali AslRousta
- *
- *  This program is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation, either version 3 of the License, or
- *  (at your option) any later version.
- *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
-
 package main
 
 import (
@@ -83,15 +41,21 @@ func (sa *stringArray) Set(value string) error {
 	return nil
 }
 
-var includePaths stringArray
+var (
+	includePaths     stringArray
+	macroBufSize     int
+	expansionBufSize int
+)
 
 func init() {
 	flag.Var(&includePaths, "include", "adds a `directory` to the list of include paths")
+	flag.IntVar(&macroBufSize, "mbufsize", 2048, "sets the macro buffer size")
+	flag.IntVar(&expansionBufSize, "ebufsize", 2048, "sets the expansion buffer size")
 }
 
 func printUsage() {
 	fmt.Fprintf(
-		flag.CommandLine.Output(),
+		os.Stderr,
 		"Usage: mx [OPTION]... FILE\n"+
 			"Processes and expands macros in FILE and writes the result to stdout.\n"+
 			"If no FILE is given, it reads from stdin.\n\n"+
@@ -106,6 +70,8 @@ func main() {
 
 	e := mx.Engine{
 		IncludePaths: includePaths,
+		MacroBufSize: macroBufSize,
+		ExpBufSize:   expansionBufSize,
 	}
 
 	if len(flag.Args()) > 0 {
